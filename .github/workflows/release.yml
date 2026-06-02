@@ -1,0 +1,35 @@
+name: Release
+
+# Semantic releases managed by Diatreme (https://github.com/MagmaMoose/diatreme).
+# On merges to main it computes the next version from Conventional Commits, updates
+# version.txt + CHANGELOG.md, tags vX.Y.Z, and publishes a GitHub Release.
+# Versioning tool: release-please (release-type: simple) - see release-please-config.json.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # tags, GitHub Releases, and the release PR / version commits
+  pull-requests: write   # release-please opens/updates the release PR
+  id-token: write        # OIDC for auth-mode: public-app (the Diatreme GitHub App)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: magmamoose/diatreme@v1
+        with:
+          mode: release
+          versioning-tool: release-please
+          environment: prod
+          environments: '["prod"]'
+          prerelease-identifiers: '{}'
+          # No Docker image to promote (the proxy image is built locally), so image_name is omitted.
+          # auth-mode defaults to public-app: the Diatreme GitHub App must be installed on this repo.
+          # To use the built-in workflow token instead, set:
+          #   auth-mode: github-token

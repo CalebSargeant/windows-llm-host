@@ -14,13 +14,14 @@
 function Get-LocalVersion {
   param([string]$Root)
 
-  $versionFile = Join-Path $Root "VERSION"
+  # version.txt is maintained by release-please (see release-please-config.json).
+  $versionFile = Join-Path $Root "version.txt"
   if (Test-Path $versionFile) {
     $value = (Get-Content $versionFile -Raw).Trim()
     if ($value) { return $value }
   }
 
-  # Fall back to the nearest git tag if VERSION is missing.
+  # Fall back to the nearest git tag if version.txt is missing.
   $desc = & git -C $Root describe --tags --abbrev=0 2>$null
   if ($LASTEXITCODE -eq 0 -and $desc) { return $desc.Trim() }
 
