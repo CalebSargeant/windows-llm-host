@@ -446,6 +446,12 @@ Configure behavior in `.env` (or with parameters):
 
 The watcher only restores a stack that *it* paused (tracked in `.game-mode-state`), so it will not restart a stack you stopped yourself. If you also use the full-screen signal, note that full-screen video players will look like a game; add real games to `GAME_MODE_PROCESSES` and set `GAME_MODE_USE_FULLSCREEN=false` if you prefer process-only detection.
 
+## Windows GUI App
+
+A WinUI 3 desktop app for managing the stack — start/stop, container status, models, API key, LAN/firewall, updates, Game Mode, and Open WebUI exposure — lives in [`gui/`](gui/). It is a full-trust front end over `docker compose` and the scripts in this repo, packaged as MSIX for sideloading or the Microsoft Store.
+
+See [gui/README.md](gui/README.md) for build, run, signing, and Store-submission instructions. CI builds an unsigned MSIX on every change under `gui/` via the `GUI build (MSIX)` workflow.
+
 ## API Usage
 
 The windows-llm-host API proxy is reachable from the Windows host at:

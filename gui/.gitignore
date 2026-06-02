@@ -1,0 +1,24 @@
+# .NET / WinUI / MSIX build artifacts
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Generated XAML compiler output
+Generated Files/
+
+# MSIX / packaging output
+AppPackages/
+BundleArtifacts/
+artifacts/
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.appxupload
+
+# Signing material - never commit certificates or keys
+*.pfx
+*.cer
+*.snk
