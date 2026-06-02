@@ -60,6 +60,7 @@ if (-not $currentKey) {
   }
   Set-Content ".env" $envContent -NoNewline -Encoding utf8
   Write-Host "Generated LLM_HOST_API_KEY in .env"
+  Write-Host "API key: $newKey"
 }
 
 if (-not $Model) {
@@ -76,4 +77,6 @@ if (-not $SkipPull) {
 Write-Host ""
 Write-Host "windows-llm-host is ready."
 Write-Host "Model: $Model"
-Write-Host "API key: stored in .env as LLM_HOST_API_KEY"
+$finalKey = Get-DotEnvValue -Name "LLM_HOST_API_KEY"
+Write-Host "API key: $finalKey"
+Write-Host "API key file: .env"

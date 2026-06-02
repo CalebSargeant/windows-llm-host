@@ -34,7 +34,7 @@ if (-not $Model) {
   $Model = Get-DotEnvValue -Name "DEFAULT_MODEL" -Default "qwen2.5-coder:7b-instruct-q4_K_M"
 }
 
-$bind = Get-DotEnvValue -Name "API_BIND" -Default "127.0.0.1"
+$bind = Get-DotEnvValue -Name "API_BIND" -Default "0.0.0.0"
 $hostName = if ($bind -eq "0.0.0.0") { "localhost" } else { $bind }
 $port = Get-DotEnvValue -Name "API_PORT" -Default "11434"
 $apiKey = Get-DotEnvValue -Name "LLM_HOST_API_KEY"
