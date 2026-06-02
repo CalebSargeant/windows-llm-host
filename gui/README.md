@@ -4,7 +4,7 @@ A Windows desktop app (WinUI 3 / Windows App SDK, .NET 8, packaged as MSIX) for 
 
 It is a thin, full-trust front end over the same things you would otherwise do from PowerShell: it shells out to `docker` / `docker compose` and to the repo's scripts (`check-update.ps1`, `game-mode-watcher.ps1`, `allow-firewall.ps1`). It does not reimplement that logic, so the GUI and the CLI stay in sync.
 
-> Status: this app was authored on macOS and has **not** been compiled or run on Windows yet. The framework-independent service/model code is unit-checked with `dotnet build` against net9.0; the WinUI/XAML layer is validated by the `GUI build (MSIX)` GitHub Actions workflow (`.github/workflows/gui-build.yml`), which is the real build gate. Expect to iterate on the first Windows build.
+> Status: this app was authored on macOS. It **builds and packages into an MSIX in CI** on `windows-latest` via the `GUI build (MSIX)` workflow (`.github/workflows/gui-build.yml`) — that is the build gate. It has **not yet been run interactively** on Windows, so expect to polish UI and behaviour on first use. The framework-independent service/model code is also compile-checked with `dotnet build` against net9.0.
 
 ## What it does
 
