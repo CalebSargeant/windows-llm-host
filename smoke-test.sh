@@ -5,6 +5,12 @@ set -euo pipefail
 
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 MODEL="${MODEL:-}"
+LLM_HOST_API_KEY="${LLM_HOST_API_KEY:-}"
+AUTH_CURL_ARGS=()
+
+if [ -n "$LLM_HOST_API_KEY" ]; then
+  AUTH_CURL_ARGS=(-H "Authorization: Bearer ${LLM_HOST_API_KEY}")
+fi
 
 if command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="python3"
@@ -20,14 +26,14 @@ docker compose up -d
 
 echo "Checking Ollama health at ${OLLAMA_URL}..."
 for _ in $(seq 1 60); do
-  if curl -fsS "${OLLAMA_URL}/api/tags" >/dev/null 2>&1; then
+  if curl -fsS "${AUTH_CURL_ARGS[@]}" "${OLLAMA_URL}/api/tags" >/dev/null 2>&1; then
     break
   fi
   sleep 2
 done
-curl -fsS "${OLLAMA_URL}/api/tags" >/dev/null
+curl -fsS "${AUTH_CURL_ARGS[@]}" "${OLLAMA_URL}/api/tags" >/dev/null
 
-export OLLAMA_URL MODEL
+export OLLAMA_URL MODEL LLM_HOST_API_KEY
 "$PYTHON_BIN" - <<'PY'
 import json
 import os
@@ -36,10 +42,18 @@ import urllib.request
 
 ollama_url = os.environ["OLLAMA_URL"].rstrip("/")
 requested_model = os.environ.get("MODEL", "").strip()
+llm_host_api_key = os.environ.get("LLM_HOST_API_KEY", "").strip()
+
+
+def auth_headers():
+    if llm_host_api_key:
+        return {"Authorization": f"Bearer {llm_host_api_key}"}
+    return {}
 
 
 def get_json(path):
-    with urllib.request.urlopen(f"{ollama_url}{path}", timeout=30) as res:
+    req = urllib.request.Request(f"{ollama_url}{path}", headers=auth_headers())
+    with urllib.request.urlopen(req, timeout=30) as res:
         return json.loads(res.read().decode("utf-8"))
 
 
@@ -48,7 +62,7 @@ def post_json(path, payload):
     req = urllib.request.Request(
         f"{ollama_url}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", **auth_headers()},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=600) as res:
