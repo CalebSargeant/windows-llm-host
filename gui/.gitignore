@@ -22,3 +22,7 @@ artifacts/
 *.pfx
 *.cer
 *.snk
+
+# The repo-root .gitignore (Python template) ignores *.manifest (PyInstaller).
+# app.manifest is a required source file for this app, so keep it tracked.
+!app.manifest
