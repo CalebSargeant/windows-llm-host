@@ -4,7 +4,8 @@
 # Usage:
 #   ./pull-models.sh                         # recommended set
 #   PROFILE=fast ./pull-models.sh            # smallest useful set
-#   PROFILE=max ./pull-models.sh             # aggressive CPU/RAM/GPU set
+#   PROFILE=max ./pull-models.sh             # aggressive CPU/RAM/GPU set, up to 70B-class
+#   PROFILE=extreme ./pull-models.sh         # everything, incl. models that exceed ~64 GB RAM
 #   ./pull-models.sh qwen3:4b-instruct       # explicit model list
 #
 # The script is idempotent: ollama pull skips layers already present.
@@ -32,8 +33,18 @@ MAX_MODELS=(
   "qwen2.5-coder:7b-instruct-q4_K_M|Best practical coding model|Strong code generation and debugging; may partially offload to CPU/RAM on 4 GB VRAM."
   "qwen3:14b-q4_K_M|Stronger quality model|Higher quality than 4B/7B, but expects CPU/RAM participation and slower generation."
   "gpt-oss:20b|Strong reasoning candidate|Large open-weight reasoning model; uses system RAM heavily and will be slower."
-  "qwen3-coder:30b|Max quality coding mode|Best local coding candidate in this stack; 19 GB model, heavy CPU/RAM use, slow but capable."
-  "qwen3:30b-instruct|Max quality general mode|Strong general Qwen3 model; 19 GB model, heavy CPU/RAM use, slow but capable."
+  "qwen3-coder:30b|Heavy coding mode|30B coding model, ~19 GB; heavy CPU/RAM use, slow but capable."
+  "qwen3:30b-instruct|Heavy general mode|Strong 30B general Qwen3 model, ~19 GB; heavy CPU/RAM use, slow but capable."
+  "qwen2.5-coder:32b|Max coding mode|32B coding model, ~20 GB; wants a big-RAM machine, slow but strong on code."
+  "llama3.3:70b|Max general mode|70B-class general model, ~43 GB q4; needs ~48 GB+ free RAM, very slow on CPU but maximum local capability."
+)
+
+# Everything in MAX plus models that will likely exceed ~64 GB RAM and thrash swap.
+# Opt-in only via PROFILE=extreme.
+EXTREME_MODELS=(
+  "${MAX_MODELS[@]}"
+  "qwen2.5:72b|Max general (alt 70B)|Alternative 70B-class general model, ~47 GB q4; needs ~52 GB+ free RAM."
+  "gpt-oss:120b|Experimental, may exceed RAM|~65 GB open-weight model; will exceed 64 GB RAM and thrash swap. Opt-in only."
 )
 
 CUSTOM_MODELS=()
@@ -54,8 +65,11 @@ else
     max|heavy)
       MODEL_ROWS=("${MAX_MODELS[@]}")
       ;;
+    extreme)
+      MODEL_ROWS=("${EXTREME_MODELS[@]}")
+      ;;
     *)
-      echo "Unknown PROFILE='$PROFILE'. Use fast, recommended, or max." >&2
+      echo "Unknown PROFILE='$PROFILE'. Use fast, recommended, max, or extreme." >&2
       exit 2
       ;;
   esac
