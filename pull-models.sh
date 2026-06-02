@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-CONTAINER="${OLLAMA_CONTAINER:-local-ai-ollama}"
+CONTAINER="${OLLAMA_CONTAINER:-windows-llm-host-ollama}"
 PROFILE="${PROFILE:-recommended}"
 
 FAST_MODELS=(

@@ -8,8 +8,9 @@
 
 set -euo pipefail
 
-CONTAINER="${OLLAMA_CONTAINER:-local-ai-ollama}"
+CONTAINER="${OLLAMA_CONTAINER:-windows-llm-host-ollama}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
+LLM_HOST_API_KEY="${LLM_HOST_API_KEY:-}"
 BENCH_PROFILE="${BENCH_PROFILE:-recommended}"
 NUM_PREDICT="${NUM_PREDICT:-220}"
 NUM_CTX="${NUM_CTX:-4096}"
@@ -76,13 +77,18 @@ echo "Starting stack..."
 docker compose up -d
 
 echo "Waiting for Ollama at ${OLLAMA_URL}..."
+AUTH_CURL_ARGS=()
+if [ -n "$LLM_HOST_API_KEY" ]; then
+  AUTH_CURL_ARGS=(-H "Authorization: Bearer ${LLM_HOST_API_KEY}")
+fi
+
 for _ in $(seq 1 60); do
-  if curl -fsS "${OLLAMA_URL}/api/tags" >/dev/null 2>&1; then
+  if curl -fsS "${AUTH_CURL_ARGS[@]}" "${OLLAMA_URL}/api/tags" >/dev/null 2>&1; then
     break
   fi
   sleep 2
 done
-curl -fsS "${OLLAMA_URL}/api/tags" >/dev/null
+curl -fsS "${AUTH_CURL_ARGS[@]}" "${OLLAMA_URL}/api/tags" >/dev/null
 
 echo "Pulling benchmark candidates..."
 for row in "${MODEL_ROWS[@]}"; do
@@ -92,7 +98,7 @@ for row in "${MODEL_ROWS[@]}"; do
 done
 
 BENCH_ROWS="$(printf '%s\n' "${MODEL_ROWS[@]}")"
-export BENCH_ROWS CONTAINER OLLAMA_URL NUM_PREDICT NUM_CTX RESULT_DIR PROMPT
+export BENCH_ROWS CONTAINER OLLAMA_URL LLM_HOST_API_KEY NUM_PREDICT NUM_CTX RESULT_DIR PROMPT
 
 "$PYTHON_BIN" - <<'PY'
 import csv
@@ -108,6 +114,7 @@ from pathlib import Path
 
 container = os.environ["CONTAINER"]
 ollama_url = os.environ["OLLAMA_URL"].rstrip("/")
+llm_host_api_key = os.environ.get("LLM_HOST_API_KEY", "").strip()
 rows = [line.split("|", 1) for line in os.environ["BENCH_ROWS"].splitlines() if line.strip()]
 num_predict = int(os.environ["NUM_PREDICT"])
 num_ctx = int(os.environ["NUM_CTX"])
@@ -132,10 +139,13 @@ def run_cmd(cmd, timeout=20):
 
 def post_json(path, payload, timeout=1800):
     data = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if llm_host_api_key:
+        headers["Authorization"] = f"Bearer {llm_host_api_key}"
     req = urllib.request.Request(
         f"{ollama_url}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as res:

@@ -1,4 +1,4 @@
-# Local AI: Ollama + Open WebUI
+# windows-llm-host
 
 Local LLM stack for a Windows laptop with:
 
@@ -7,9 +7,21 @@ Local LLM stack for a Windows laptop with:
 - 64 GB system RAM
 - Docker Desktop using the WSL2 backend
 
-The setup optimizes for maximum local capability first, not comfort. It does not add moderation services, safety filters, prompt wrappers, proxy guardrails, or assistant-personality system prompts. It is normal local Ollama/Open WebUI usage with persistent local data.
+The setup optimizes for maximum local capability first, then makes it easy to use the laptop as a local API source from your own devices. Ollama runs inside Docker, Open WebUI gives you a browser UI, and a tiny API proxy exposes both Ollama's native API and Ollama's OpenAI-compatible `/v1` API.
+
+It does not add moderation services, safety filters, prompt wrappers, or assistant-personality system prompts. It is normal local Ollama/Open WebUI usage with persistent local data. The proxy adds optional bearer-token authentication for LAN use.
 
 ## Quick Start
+
+From Windows PowerShell, run this one command to install or update the local checkout, refresh Docker, start the stack, pull the default model, and run a smoke test:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -Lan
+```
+
+That installs into `%USERPROFILE%\windows-llm-host` by default. Run PowerShell as Administrator if you want the command to open the Windows Firewall rule automatically; otherwise it will tell you the one elevated firewall command to run if LAN devices cannot connect.
+
+After the first setup, rerun the same command any time you want to update the local checkout and running containers.
 
 Run these commands from this directory:
 
@@ -28,7 +40,25 @@ chmod +x pull-models.sh benchmark-models.sh smoke-test.sh
 Then open:
 
 - Open WebUI: <http://localhost:3000>
-- Ollama API: <http://localhost:11434>
+- windows-llm-host API proxy: <http://localhost:11434>
+
+From an existing checkout, you can also run:
+
+```powershell
+.\scripts\bootstrap.ps1
+```
+
+For LAN API access from another device:
+
+```powershell
+.\scripts\bootstrap.ps1 -Lan
+```
+
+Run the firewall helper from an elevated PowerShell session if other LAN devices cannot reach the API:
+
+```powershell
+.\scripts\allow-firewall.ps1
+```
 
 Stop the stack without deleting models:
 
@@ -46,7 +76,9 @@ docker compose down -v
 
 - The compose file is now named `docker-compose.yml`, so `docker compose up -d` works without `-f`.
 - Ollama uses `gpus: all`, the direct Compose equivalent of `docker run --gpus all`.
-- Ollama and Open WebUI ports bind to `127.0.0.1` by default for local-only API exposure.
+- The windows-llm-host API proxy and Open WebUI ports bind to `127.0.0.1` by default for local-only exposure.
+- Ollama is no longer published directly to the host; the proxy publishes native `/api/*` and OpenAI-compatible `/v1/*`.
+- Set `LLM_HOST_API_KEY` to require a bearer token on every proxied API request.
 - Ollama has a healthcheck, and Open WebUI waits for Ollama before starting.
 - Open WebUI connects to Ollama through Docker networking at `http://ollama:11434`.
 - Persistent volumes are kept: `ollama_data` and `webui_data`.
@@ -102,8 +134,8 @@ Validate inside this Ollama container after startup:
 
 ```bash
 docker compose up -d
-docker exec local-ai-ollama nvidia-smi
-docker exec local-ai-ollama ollama list
+docker exec windows-llm-host-ollama nvidia-smi
+docker exec windows-llm-host-ollama ollama list
 ```
 
 If the container cannot see `nvidia-smi`, fix Docker Desktop GPU passthrough before benchmarking models.
@@ -321,7 +353,7 @@ Keep `OLLAMA_NUM_PARALLEL=1` for heavy models. Parallel requests can multiply me
 
 ## API Usage
 
-Ollama is reachable from the Windows host at:
+The windows-llm-host API proxy is reachable from the Windows host at:
 
 ```text
 http://localhost:11434
@@ -340,6 +372,14 @@ qwen2.5-coder:7b-instruct-q4_K_M
 ```
 
 Use `qwen3:4b-instruct` if you want a faster daily default, and use `qwen3:14b-q4_K_M` or heavier models when quality matters more than latency.
+
+If `LLM_HOST_API_KEY` is set, include it on API calls:
+
+```bash
+export LLM_HOST_API_KEY=your-key-here
+curl http://localhost:11434/api/tags \
+  -H "Authorization: Bearer ${LLM_HOST_API_KEY}"
+```
 
 ### Ollama Native API: Generate
 
@@ -369,7 +409,7 @@ curl http://localhost:11434/api/chat \
 
 ### Ollama OpenAI-Compatible API
 
-Ollama exposes an OpenAI-compatible endpoint at `/v1/chat/completions`.
+The windows-llm-host API proxy forwards Ollama's OpenAI-compatible endpoint at `/v1/chat/completions`.
 
 ```bash
 curl http://localhost:11434/v1/chat/completions \
@@ -504,6 +544,12 @@ Containers on the same Compose network can call Ollama at:
 http://ollama:11434
 ```
 
+They can also call the API proxy at:
+
+```text
+http://api:8080
+```
+
 Example service snippet:
 
 ```yaml
@@ -511,7 +557,7 @@ services:
   my-app:
     image: curlimages/curl:latest
     networks:
-      - local-ai-net
+      - windows-llm-host-net
     command:
       - sh
       - -lc
@@ -521,14 +567,14 @@ services:
           -d '{"model":"qwen3:4b-instruct","prompt":"Say ok","stream":false}'
 
 networks:
-  local-ai-net:
+  windows-llm-host-net:
     external: true
 ```
 
 From a one-off container:
 
 ```bash
-docker run --rm --network local-ai-net curlimages/curl:latest \
+docker run --rm --network windows-llm-host-net curlimages/curl:latest \
   curl http://ollama:11434/api/tags
 ```
 
@@ -556,29 +602,42 @@ This affects Open WebUI's default/pinned model list, not Ollama's native API beh
 Default behavior is local-only:
 
 ```yaml
-127.0.0.1:11434:11434
+127.0.0.1:11434:8080
 127.0.0.1:3000:8080
 ```
 
 That means other machines on your LAN cannot call the API unless you opt in.
 
-To expose to your LAN, start with:
+To expose the API proxy to your LAN with a bearer token:
 
 ```bash
-OLLAMA_BIND=0.0.0.0 \
-WEBUI_BIND=0.0.0.0 \
-WEBUI_AUTH=true \
-ENABLE_API_KEYS=true \
-USER_PERMISSIONS_FEATURES_API_KEYS=true \
+LLM_HOST_API_KEY="$(openssl rand -base64 32)" \
+API_BIND=0.0.0.0 \
 docker compose up -d
 ```
 
-Risk: LAN exposure lets other devices send prompts, consume CPU/GPU/RAM, and read responses from any unauthenticated endpoint. Do not expose this directly to the public internet.
+From PowerShell:
 
-If you need LAN access, put a reverse proxy in front of it with authentication. Example Caddy concept:
+```powershell
+.\scripts\bootstrap.ps1 -Lan
+```
+
+Risk: LAN exposure lets other devices send prompts and consume CPU/GPU/RAM if they have the token. Do not expose this directly to the public internet.
+
+Open WebUI remains localhost-only unless you also set `WEBUI_BIND=0.0.0.0`. If you expose Open WebUI, also set:
+
+```bash
+WEBUI_AUTH=true \
+ENABLE_API_KEYS=true \
+USER_PERMISSIONS_FEATURES_API_KEYS=true \
+WEBUI_BIND=0.0.0.0 \
+docker compose up -d
+```
+
+For access away from home, use a private network or VPN-style path such as Tailscale or WireGuard rather than opening this port on your router. If you still need a reverse proxy, keep authentication in front of it. Example Caddy concept:
 
 ```caddyfile
-local-ai.lan {
+windows-llm-host.lan {
   bind 192.168.1.50
   basicauth {
     user JDJhJDE0JHVzZV9hX3JlYWxfaGFzaF9oZXJl
@@ -595,6 +654,7 @@ Check stack status:
 
 ```bash
 docker compose ps
+docker compose logs -f api
 docker compose logs -f ollama
 docker compose logs -f open-webui
 ```
