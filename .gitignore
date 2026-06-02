@@ -219,3 +219,6 @@ __marimo__/
 
 # Local benchmark outputs
 benchmark-results/
+
+# Game Mode watcher runtime state
+.game-mode-state
