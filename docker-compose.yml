@@ -1,0 +1,62 @@
+name: local-ai
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: local-ai-ollama
+    restart: unless-stopped
+    gpus: all
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-30m}"
+      OLLAMA_LOAD_TIMEOUT: "${OLLAMA_LOAD_TIMEOUT:-30m}"
+      OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-1}"
+      OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
+      NVIDIA_VISIBLE_DEVICES: "${NVIDIA_VISIBLE_DEVICES:-all}"
+      NVIDIA_DRIVER_CAPABILITIES: "${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}"
+    ports:
+      - "${OLLAMA_BIND:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - local-ai-net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: local-ai-open-webui
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      ENABLE_OLLAMA_API: "true"
+      WEBUI_AUTH: "${WEBUI_AUTH:-false}"
+      ENABLE_API_KEYS: "${ENABLE_API_KEYS:-false}"
+      USER_PERMISSIONS_FEATURES_API_KEYS: "${USER_PERMISSIONS_FEATURES_API_KEYS:-false}"
+      ENABLE_COMMUNITY_SHARING: "${ENABLE_COMMUNITY_SHARING:-false}"
+      ENABLE_FOLLOW_UP_GENERATION: "${ENABLE_FOLLOW_UP_GENERATION:-false}"
+      ENABLE_TAGS_GENERATION: "${ENABLE_TAGS_GENERATION:-false}"
+      ENABLE_MEMORIES: "${ENABLE_MEMORIES:-false}"
+      DEFAULT_MODELS: "${DEFAULT_MODEL:-qwen2.5-coder:7b-instruct-q4_K_M}"
+      DEFAULT_PINNED_MODELS: "${DEFAULT_PINNED_MODELS:-qwen3:4b-instruct,qwen2.5-coder:7b-instruct-q4_K_M,qwen3:14b-q4_K_M,qwen3-coder:30b}"
+    ports:
+      - "${WEBUI_BIND:-127.0.0.1}:${WEBUI_PORT:-3000}:8080"
+    volumes:
+      - webui_data:/app/backend/data
+    networks:
+      - local-ai-net
+
+networks:
+  local-ai-net:
+    name: local-ai-net
+
+volumes:
+  ollama_data:
+  webui_data:
