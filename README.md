@@ -108,7 +108,7 @@ Pick what the installer tracks with `-Channel`:
 
 Releases are produced automatically by [Diatreme](https://github.com/MagmaMoose/diatreme) (via `.github/workflows/release.yml`) using [release-please](https://github.com/googleapis/release-please) with the `simple` release type. On merges to `main`, version bumps, the `vX.Y.Z` tag, the GitHub Release, `CHANGELOG.md`, and `version.txt` are all derived from [Conventional Commits](https://www.conventionalcommits.org/) — so write commits like `feat: ...`, `fix: ...`, or `feat!: ...` for a release to be cut. Until the first release is published, the `stable`/`prerelease` channels report that none were found and change nothing.
 
-Setup prerequisite: the Diatreme GitHub App must be installed on this repository (the workflow uses `auth-mode: public-app`). To use the built-in `GITHUB_TOKEN` instead, set `auth-mode: github-token` in the workflow.
+No GitHub App is required: the workflow uses `auth-mode: github-token` (the built-in workflow token), which is why the repo setting *Allow GitHub Actions to create and approve pull requests* is enabled. To use the Diatreme GitHub App instead — for example to bypass branch protection on the release PR — set `auth-mode: public-app` (keeping `id-token: write`) and install the App on this repository.
 
 ## What Changed
 

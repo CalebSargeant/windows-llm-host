@@ -16,7 +16,7 @@ concurrency:
 permissions:
   contents: write        # tags, GitHub Releases, and the release PR / version commits
   pull-requests: write   # release-please opens/updates the release PR
-  id-token: write        # OIDC for auth-mode: public-app (the Diatreme GitHub App)
+  id-token: write        # only used by auth-mode: public-app; harmless otherwise
 
 jobs:
   release:
@@ -26,10 +26,13 @@ jobs:
         with:
           mode: release
           versioning-tool: release-please
+          # App-free: use the workflow GITHUB_TOKEN for tags, releases, and the
+          # release PR. Requires the repo setting "Allow GitHub Actions to create
+          # and approve pull requests" (already enabled). To use the Diatreme
+          # GitHub App instead (branch-protection bypass), set auth-mode: public-app
+          # and keep id-token: write below.
+          auth-mode: github-token
           environment: prod
           environments: '["prod"]'
           prerelease-identifiers: '{}'
           # No Docker image to promote (the proxy image is built locally), so image_name is omitted.
-          # auth-mode defaults to public-app: the Diatreme GitHub App must be installed on this repo.
-          # To use the built-in workflow token instead, set:
-          #   auth-mode: github-token
