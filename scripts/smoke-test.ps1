@@ -31,7 +31,7 @@ function Get-DotEnvValue {
 }
 
 if (-not $Model) {
-  $Model = Get-DotEnvValue -Name "DEFAULT_MODEL" -Default "qwen2.5-coder:7b-instruct-q4_K_M"
+  $Model = Get-DotEnvValue -Name "DEFAULT_MODEL" -Default "qwen3-coder:30b"
 }
 
 $bind = Get-DotEnvValue -Name "API_BIND" -Default "0.0.0.0"

@@ -1,8 +1,11 @@
 [CmdletBinding()]
 param(
   [string]$Model,
+  [ValidateSet("max", "coding", "balanced", "fast")]
+  [string]$ModelPreference = "max",
   [switch]$Gpu,
   [switch]$Lan,
+  [switch]$SkipHardwareDetect,
   [switch]$SkipPull
 )
 
@@ -63,8 +66,23 @@ if (-not $currentKey) {
   Write-Host "API key: $newKey"
 }
 
+if (-not $Model -and -not $SkipHardwareDetect) {
+  try {
+    Write-Host "Detecting best local model for this hardware (preference: $ModelPreference)..."
+    $detectOutput = & (Join-Path $PSScriptRoot "detect-model.ps1") -Preference $ModelPreference -Apply -Json
+    $detection = $detectOutput | ConvertFrom-Json
+    $Model = $detection.selected_model
+    Write-Host "Selected model: $Model [$($detection.selected_expected_mode)]"
+    Write-Host "Fast fallback: $($detection.fast_model)"
+    Write-Host "Balanced fallback: $($detection.balanced_model)"
+  }
+  catch {
+    Write-Warning "Hardware model detection failed: $($_.Exception.Message)"
+  }
+}
+
 if (-not $Model) {
-  $Model = Get-DotEnvValue -Name "DEFAULT_MODEL" -Default "qwen2.5-coder:7b-instruct-q4_K_M"
+  $Model = Get-DotEnvValue -Name "DEFAULT_MODEL" -Default "qwen3-coder:30b"
 }
 
 & (Join-Path $PSScriptRoot "start.ps1") -Gpu:$Gpu -Lan:$Lan -Build

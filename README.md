@@ -8,13 +8,19 @@ The API proxy is LAN-visible by default and protected with a generated bearer to
 
 ## Quick Start
 
-From Windows PowerShell, run this one command to install or update the local checkout, refresh Docker, start the stack, pull the default model, and run a smoke test:
+From Windows PowerShell, run this one command to install or update the local checkout, refresh Docker, auto-detect the largest likely-loadable model, start the stack, pull that model, and run a smoke test:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1)))
 ```
 
 That installs into `%USERPROFILE%\windows-llm-host` by default. It prints the generated `LLM_HOST_API_KEY` in the terminal and stores it in `.env`.
+
+The default model preference is `max`: make the machine work. To choose a lighter setup:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -ModelPreference balanced
+```
 
 Run PowerShell as Administrator if you want the command to open the Windows Firewall rule automatically; otherwise it will tell you the one elevated firewall command to run if LAN devices cannot connect.
 
@@ -26,6 +32,18 @@ From an existing checkout on Windows, you can also run:
 
 ```powershell
 .\scripts\bootstrap.ps1
+```
+
+To inspect the hardware-based recommendation without starting the stack:
+
+```powershell
+.\scripts\detect-model.ps1
+```
+
+To write the detected max model into `.env`:
+
+```powershell
+.\scripts\detect-model.ps1 -Apply
 ```
 
 For manual Docker Compose usage, create `.env` and set `LLM_HOST_API_KEY` first:
@@ -85,7 +103,7 @@ docker compose down -v
 - Ollama has a healthcheck, and Open WebUI waits for Ollama before starting.
 - Open WebUI connects to Ollama through Docker networking at `http://ollama:11434`.
 - Persistent volumes are kept: `ollama_data` and `webui_data`.
-- Model pulling, smoke testing, and benchmarking are scripted.
+- Hardware model detection, model pulling, smoke testing, stress testing, and benchmarking are scripted.
 
 ## Prerequisites
 
@@ -183,15 +201,25 @@ References:
 
 Model performance depends heavily on GPU VRAM, system RAM, context length, and quantization. Small quantized models can often run mostly on GPU. Larger models may spill into system RAM and use CPU heavily, which is expected but slower.
 
-Recommended defaults:
+The Windows installer runs hardware detection by default with `-ModelPreference max`. That means setup tries to choose the largest likely-loadable model for the machine, not the most comfortable one. It also writes fallback recommendations into `.env`.
+
+Useful detection commands:
+
+```powershell
+.\scripts\detect-model.ps1
+.\scripts\detect-model.ps1 -Preference balanced
+.\scripts\detect-model.ps1 -Preference max -Apply
+```
+
+Model roles:
 
 | Role | Model | Size | Why |
 |---|---:|---:|---|
 | Fastest model | `qwen3:1.7b-q8_0` | 2.2 GB | Fast sanity checks and quick answers. |
 | Best daily model | `qwen3:4b-instruct` | 2.5 GB | Good balance for limited-VRAM machines. Modern general model, long context tag. |
-| Best coding model | `qwen2.5-coder:7b-instruct-q4_K_M` | 4.7 GB | Strong practical code model. May partially offload to CPU/RAM on modest GPUs. |
+| Balanced coding model | `qwen2.5-coder:7b-instruct-q4_K_M` | 4.7 GB | Strong practical code model. May partially offload to CPU/RAM on modest GPUs. |
 | Highest quality but slower | `qwen3:14b-q4_K_M` | 9.3 GB | Better reasoning than small models, but it will lean on CPU/RAM. |
-| Max quality / heavy coding | `qwen3-coder:30b` | 19 GB | Strongest coding candidate here. It will be slow and RAM heavy. |
+| Max default / heavy coding | `qwen3-coder:30b` | 19 GB | Strongest coding candidate here. It will be slow, RAM heavy, and noisy under load. |
 | Max quality / heavy general | `qwen3:30b-instruct` | 19 GB | Stronger general model. Use when latency does not matter. |
 | Strong reasoning candidate | `gpt-oss:20b` | large | Worth benchmarking against Qwen3 14B/30B for reasoning-heavy tasks. |
 
@@ -208,11 +236,21 @@ Use `qwen3:4b-instruct`.
 
 It is the best general default when you want faster local interaction. It should be the first model you try in Open WebUI for normal chat, summarization, light coding, and analysis.
 
-### Best Coding Model
+### Max Default Model
+
+Use hardware detection, which will usually choose the largest loadable candidate:
+
+```powershell
+.\scripts\detect-model.ps1 -Preference max -Apply
+```
+
+On high-RAM machines, expect `qwen3-coder:30b` to be selected for coding-heavy use. It is not the comfort option; it is the "make this laptop earn its keep" option.
+
+### Balanced Coding Model
 
 Use `qwen2.5-coder:7b-instruct-q4_K_M`.
 
-It is the recommended default model for API and coding use. Expect slower responses than the 4B model, but better code.
+It is the practical API/coding fallback when you want better responsiveness than the 30B models.
 
 ### Fastest Model
 
@@ -228,10 +266,16 @@ If you are willing to go heavier, benchmark `qwen3-coder:30b`, `qwen3:30b-instru
 
 ## Pulling Models
 
-Recommended set:
+Maximum quality/heavy set:
 
 ```bash
 ./pull-models.sh
+```
+
+Balanced recommended set:
+
+```bash
+PROFILE=recommended ./pull-models.sh
 ```
 
 Fast-only set:
@@ -240,7 +284,7 @@ Fast-only set:
 PROFILE=fast ./pull-models.sh
 ```
 
-Maximum quality/heavy set:
+Explicit maximum quality/heavy set:
 
 ```bash
 PROFILE=max ./pull-models.sh
@@ -262,7 +306,13 @@ Do not guess. Benchmark on your actual laptop:
 ./benchmark-models.sh
 ```
 
-The benchmark and smoke-test scripts require Python 3 in the shell where you run them. On Ubuntu/WSL this is usually available as `python3`.
+The default benchmark profile is `max`. The benchmark and smoke-test scripts require Python 3 in the shell where you run them. On Ubuntu/WSL this is usually available as `python3`.
+
+Balanced profile:
+
+```bash
+BENCH_PROFILE=recommended ./benchmark-models.sh
+```
 
 Fast profile:
 
@@ -318,6 +368,33 @@ The smoke test starts the stack, checks Ollama health, lists installed models, s
 
 This mode intentionally uses GPU, CPU, RAM, heat, and battery aggressively. Plug in the laptop and expect fan noise.
 
+If Task Manager looks calm while a model is loaded, that is not automatically bad. A loaded model can reserve dedicated GPU memory while doing no active compute. Also, Task Manager often shows `3D`, `Copy`, `Video Encode`, and `Video Decode` by default; LLM inference usually shows up under `CUDA` or `Compute_0`. Change one of the GPU graph dropdowns while a generation is running, or watch `nvidia-smi`.
+
+On Windows, run a stress test from the repo checkout:
+
+```powershell
+.\scripts\detect-model.ps1 -Preference max -Apply
+.\scripts\stress-test.ps1 -MaxMode -Pull -Parallel 2 -Requests 8 -NumPredict 900 -NumCtx 8192
+```
+
+To force the heaviest coding model explicitly:
+
+```powershell
+.\scripts\stress-test.ps1 -MaxMode -Pull -Model qwen3-coder:30b -Parallel 2 -Requests 6 -NumPredict 900 -NumCtx 8192
+```
+
+The stress test writes CSV results and sampled GPU/Docker stats to `stress-results/`.
+
+`-MaxMode` updates `.env` with:
+
+```text
+OLLAMA_KEEP_ALIVE=-1
+OLLAMA_NUM_PARALLEL=<Parallel>
+OLLAMA_MAX_LOADED_MODELS=1
+```
+
+With `-ModelPreference max`, setup writes `OLLAMA_KEEP_ALIVE=-1` and `OLLAMA_NUM_PARALLEL=2` so the selected model stays loaded and the API can apply some parallel pressure. `-MaxMode` lets you raise or lower parallelism for stress testing.
+
 1. Set Windows power mode to Best performance.
 2. In NVIDIA Control Panel, prefer maximum performance for Docker Desktop / WSL if available.
 3. In Docker Desktop resources, allocate roughly:
@@ -344,7 +421,7 @@ Then start again:
 
 ```bash
 OLLAMA_KEEP_ALIVE=-1 \
-OLLAMA_NUM_PARALLEL=1 \
+OLLAMA_NUM_PARALLEL=2 \
 OLLAMA_MAX_LOADED_MODELS=1 \
 docker compose up -d
 
@@ -352,7 +429,7 @@ PROFILE=max ./pull-models.sh
 BENCH_PROFILE=max ./benchmark-models.sh
 ```
 
-Keep `OLLAMA_NUM_PARALLEL=1` for heavy models. Parallel requests can multiply memory pressure and make large models unusable on smaller machines.
+Drop `OLLAMA_NUM_PARALLEL=1` if a heavy model fails to load or Docker runs out of memory. Parallel requests can multiply memory pressure and make large models unusable on smaller machines.
 
 ## API Usage
 
@@ -374,13 +451,13 @@ Open WebUI is reachable at:
 http://localhost:3000
 ```
 
-Default API model recommendation:
+Detected default model:
 
 ```text
-qwen2.5-coder:7b-instruct-q4_K_M
+DEFAULT_MODEL from .env
 ```
 
-Use `qwen3:4b-instruct` if you want a faster daily default, and use `qwen3:14b-q4_K_M` or heavier models when quality matters more than latency.
+The installer defaults to `-ModelPreference max`, so high-RAM machines will usually select a heavy model such as `qwen3-coder:30b`. Use `RECOMMENDED_BALANCED_MODEL` from `.env` when you want a practical coding fallback, and `RECOMMENDED_FAST_MODEL` when you want speed.
 
 If `LLM_HOST_API_KEY` is set, include it on API calls:
 
@@ -396,7 +473,7 @@ curl http://localhost:11434/api/tags \
 curl http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "model": "qwen3-coder:30b",
     "prompt": "Write a Python function that validates an IPv4 address.",
     "stream": false
   }'
@@ -408,7 +485,7 @@ curl http://localhost:11434/api/generate \
 curl http://localhost:11434/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "model": "qwen3-coder:30b",
     "messages": [
       {"role": "user", "content": "Explain this Docker Compose GPU setting in one paragraph: gpus: all"}
     ],
@@ -424,7 +501,7 @@ The windows-llm-host API proxy forwards Ollama's OpenAI-compatible endpoint at `
 curl http://localhost:11434/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "model": "qwen3-coder:30b",
     "messages": [
       {"role": "user", "content": "Write a compact Bash function that checks whether Docker is running."}
     ],
@@ -447,7 +524,7 @@ curl http://localhost:3000/api/chat/completions \
   -H "Authorization: Bearer YOUR_OPEN_WEBUI_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "model": "qwen3-coder:30b",
     "messages": [
       {"role": "user", "content": "Return a minimal docker compose healthcheck for a HTTP service."}
     ]
@@ -463,7 +540,7 @@ Open WebUI API docs:
 ```python
 import requests
 
-model = "qwen2.5-coder:7b-instruct-q4_K_M"
+model = "qwen3-coder:30b"
 
 response = requests.post(
     "http://localhost:11434/api/chat",
@@ -491,7 +568,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="qwen2.5-coder:7b-instruct-q4_K_M",
+    model="qwen3-coder:30b",
     messages=[
         {"role": "user", "content": "Write a TypeScript debounce function."}
     ],
@@ -503,7 +580,7 @@ print(response.choices[0].message.content)
 ### Node.js Native API Example
 
 ```javascript
-const model = "qwen2.5-coder:7b-instruct-q4_K_M";
+const model = "qwen3-coder:30b";
 
 const response = await fetch("http://localhost:11434/api/chat", {
   method: "POST",
@@ -536,7 +613,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: "qwen2.5-coder:7b-instruct-q4_K_M",
+  model: "qwen3-coder:30b",
   messages: [
     { role: "user", content: "Write a SQL query to find duplicate email addresses." }
   ]
@@ -595,21 +672,21 @@ Recommended app defaults:
 
 ```bash
 export LOCAL_AI_BASE_URL=http://localhost:11434
-export LOCAL_AI_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
+export LOCAL_AI_MODEL=qwen3-coder:30b
 ```
 
 For LAN clients:
 
 ```bash
 export LOCAL_AI_BASE_URL=http://<windows-machine-ip>:11434
-export LOCAL_AI_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
+export LOCAL_AI_MODEL=qwen3-coder:30b
 export LLM_HOST_API_KEY=your-generated-key
 ```
 
 For Open WebUI startup defaults, set:
 
 ```bash
-DEFAULT_MODEL=qwen2.5-coder:7b-instruct-q4_K_M docker compose up -d
+DEFAULT_MODEL=qwen3-coder:30b docker compose up -d
 ```
 
 This affects Open WebUI's default/pinned model list, not Ollama's native API behavior.
@@ -685,13 +762,13 @@ If a model is too slow or fails to load:
 - Reduce context length in your client or benchmark.
 - Use `qwen3:4b-instruct` for daily use.
 - Keep only one large model loaded with `OLLAMA_MAX_LOADED_MODELS=1`.
-- Keep parallelism low with `OLLAMA_NUM_PARALLEL=1`.
+- Lower parallelism with `OLLAMA_NUM_PARALLEL=1`.
 - Make sure Docker Desktop has enough RAM and swap.
 
 ## Final Recommendation
 
-Use `qwen2.5-coder:7b-instruct-q4_K_M` as the default API/coding model. It is the strongest practical coding model in the default pull set.
+Use hardware detection with `-ModelPreference max` as the default. It picks the largest likely-loadable model for the machine and writes it to `DEFAULT_MODEL`.
 
-Use `qwen3:4b-instruct` as the default chat/daily model when you want faster local interaction.
+Use `qwen3-coder:30b` when the detector says the machine can load it and you want maximum local coding capability. It is deliberately heavy.
 
-Use `qwen3:14b-q4_K_M`, `qwen3-coder:30b`, `qwen3:30b-instruct`, and `gpt-oss:20b` only after benchmarking. They are included for maximum capability, not comfort.
+Use `qwen2.5-coder:7b-instruct-q4_K_M` as the balanced coding fallback, and `qwen3:4b-instruct` when you want faster daily interaction.
