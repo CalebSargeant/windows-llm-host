@@ -1,9 +1,9 @@
-name: local-ai
+name: windows-llm-host
 
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: local-ai-ollama
+    container_name: windows-llm-host-ollama
     restart: unless-stopped
     gpus: all
     environment:
@@ -14,12 +14,10 @@ services:
       OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
       NVIDIA_VISIBLE_DEVICES: "${NVIDIA_VISIBLE_DEVICES:-all}"
       NVIDIA_DRIVER_CAPABILITIES: "${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}"
-    ports:
-      - "${OLLAMA_BIND:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     networks:
-      - local-ai-net
+      - windows-llm-host-net
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 15s
@@ -27,9 +25,36 @@ services:
       retries: 20
       start_period: 30s
 
+  api:
+    build:
+      context: ./proxy
+    image: windows-llm-host/proxy:local
+    container_name: windows-llm-host-api
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      UPSTREAM_BASE_URL: http://ollama:11434
+      LLM_HOST_API_KEY: "${LLM_HOST_API_KEY:-}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-*}"
+      REQUEST_TIMEOUT_MS: "${REQUEST_TIMEOUT_MS:-0}"
+      LOG_REQUESTS: "${LOG_REQUESTS:-true}"
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-11434}:8080"
+    networks:
+      - windows-llm-host-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
-    container_name: local-ai-open-webui
+    container_name: windows-llm-host-open-webui
     restart: unless-stopped
     depends_on:
       ollama:
@@ -51,11 +76,11 @@ services:
     volumes:
       - webui_data:/app/backend/data
     networks:
-      - local-ai-net
+      - windows-llm-host-net
 
 networks:
-  local-ai-net:
-    name: local-ai-net
+  windows-llm-host-net:
+    name: windows-llm-host-net
 
 volumes:
   ollama_data:
