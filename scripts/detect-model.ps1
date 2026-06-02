@@ -199,13 +199,39 @@ $candidates = @(
     quality_score = 75
     coding_score = 75
     description = "Largest coding candidate in the default set; slow but capable."
+  },
+  [pscustomobject]@{
+    model = "qwen2.5-coder:32b"
+    role = "max-coding"
+    approx_size_gb = 20.0
+    quality_score = 78
+    coding_score = 85
+    description = "32B coder; wants a big-RAM machine, strongest local coding here."
+  },
+  [pscustomobject]@{
+    model = "llama3.3:70b"
+    role = "max-general"
+    approx_size_gb = 43.0
+    quality_score = 90
+    coding_score = 55
+    description = "70B-class general model; runs on CPU/RAM, slow but maximum capability."
+  },
+  [pscustomobject]@{
+    model = "qwen2.5:72b"
+    role = "max-general"
+    approx_size_gb = 47.0
+    quality_score = 92
+    coding_score = 60
+    description = "Alternative 70B-class general model; very RAM-heavy. Needs a high Docker memory limit."
   }
 )
 
 $ranked = @()
 foreach ($candidate in $candidates) {
-  $ramNeededGb = [Math]::Ceiling([Math]::Max(6, $candidate.approx_size_gb * 1.7))
-  $comfortableRamGb = [Math]::Ceiling([Math]::Max(8, $candidate.approx_size_gb * 2.3))
+  # ~1.4x covers q4 weights + KV cache + overhead; large models are RAM-bound, not
+  # over-provisioned, so this keeps 70B-class models loadable on a big-RAM machine.
+  $ramNeededGb = [Math]::Ceiling([Math]::Max(6, $candidate.approx_size_gb * 1.4))
+  $comfortableRamGb = [Math]::Ceiling([Math]::Max(8, $candidate.approx_size_gb * 1.8))
   $gpuFit = $candidate.approx_size_gb -le $usableVramGb
   $loadable = $effectiveRamGb -eq 0 -or ($effectiveRamGb + 0.5) -ge $ramNeededGb
   $comfortable = $effectiveRamGb -eq 0 -or ($effectiveRamGb + 0.5) -ge $comfortableRamGb
