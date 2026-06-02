@@ -76,7 +76,7 @@ docker compose down -v
 
 ## Updating and Versioning
 
-The repo carries its version in the `VERSION` file. Re-running the install one-liner (or `.\scripts\install-or-update.ps1`) updates your checkout and containers in place while preserving `.env`, downloaded models, and Open WebUI/Ollama data. After an update it prints the installed version and tells you whether a newer GitHub release exists.
+The repo carries its version in the `version.txt` file. Re-running the install one-liner (or `.\scripts\install-or-update.ps1`) updates your checkout and containers in place while preserving `.env`, downloaded models, and Open WebUI/Ollama data. After an update it prints the installed version and tells you whether a newer GitHub release exists.
 
 Check for updates without changing anything:
 
@@ -102,7 +102,13 @@ Pick what the installer tracks with `-Channel`:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -Channel stable
 ```
 
-`check-update.ps1` exits with code `10` when an update is available and `0` otherwise, so you can wire it into a scheduled task or a future GUI. Until releases are published, the stable/prerelease channels simply report that none were found and change nothing.
+`check-update.ps1` exits with code `10` when an update is available and `0` otherwise, so you can wire it into a scheduled task or a future GUI.
+
+### How releases are cut
+
+Releases are produced automatically by [Diatreme](https://github.com/MagmaMoose/diatreme) (via `.github/workflows/release.yml`) using [release-please](https://github.com/googleapis/release-please) with the `simple` release type. On merges to `main`, version bumps, the `vX.Y.Z` tag, the GitHub Release, `CHANGELOG.md`, and `version.txt` are all derived from [Conventional Commits](https://www.conventionalcommits.org/) — so write commits like `feat: ...`, `fix: ...`, or `feat!: ...` for a release to be cut. Until the first release is published, the `stable`/`prerelease` channels report that none were found and change nothing.
+
+Setup prerequisite: the Diatreme GitHub App must be installed on this repository (the workflow uses `auth-mode: public-app`). To use the built-in `GITHUB_TOKEN` instead, set `auth-mode: github-token` in the workflow.
 
 ## What Changed
 
@@ -237,6 +243,17 @@ Useful Ollama model pages:
 - Qwen2.5-Coder tags: <https://ollama.com/library/qwen2.5-coder/tags>
 - Qwen3-Coder: <https://ollama.com/library/qwen3-coder>
 - GPT-OSS with Ollama: <https://cookbook.openai.com/articles/gpt-oss/run-locally-ollama>
+
+### Recommended For Your Hardware
+
+`scripts/recommend-model.ps1` detects your system RAM and NVIDIA VRAM and suggests a fast daily model (one that fits in VRAM, so it runs on the GPU), a coding model, and a max-capability model (the largest that fits in RAM). VRAM governs speed; RAM governs how big you can go.
+
+```powershell
+.\scripts\recommend-model.ps1
+.\scripts\recommend-model.ps1 -Json   # machine-readable, for scripts / the GUI
+```
+
+The installer prints this automatically at the end of a run. It is advice only — pull whatever you like with `.\scripts\pull-model.ps1 -Model <name>` and benchmark before committing to a daily driver.
 
 ### Best Daily Model
 
