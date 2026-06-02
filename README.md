@@ -1,33 +1,38 @@
 # windows-llm-host
 
-Local LLM stack for a Windows laptop with:
+Host a local LLM API from a Windows laptop or desktop.
 
-- NVIDIA RTX A2000 Laptop GPU, 4 GB dedicated VRAM
-- Intel Iris Xe integrated graphics
-- 64 GB system RAM
-- Docker Desktop using the WSL2 backend
+The setup optimizes for local capability first, then makes it easy to use the machine as an API source from your own devices. Ollama runs inside Docker, Open WebUI gives you a browser UI, and a tiny API proxy exposes both Ollama's native API and Ollama's OpenAI-compatible `/v1` API.
 
-The setup optimizes for maximum local capability first, then makes it easy to use the laptop as a local API source from your own devices. Ollama runs inside Docker, Open WebUI gives you a browser UI, and a tiny API proxy exposes both Ollama's native API and Ollama's OpenAI-compatible `/v1` API.
-
-It does not add moderation services, safety filters, prompt wrappers, or assistant-personality system prompts. It is normal local Ollama/Open WebUI usage with persistent local data. The proxy adds optional bearer-token authentication for LAN use.
+The API proxy is LAN-visible by default and protected with a generated bearer token. Open WebUI stays localhost-only unless you explicitly expose it. The stack does not add moderation services, safety filters, prompt wrappers, or assistant-personality system prompts.
 
 ## Quick Start
 
 From Windows PowerShell, run this one command to install or update the local checkout, refresh Docker, start the stack, pull the default model, and run a smoke test:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -Lan
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1)))
 ```
 
-That installs into `%USERPROFILE%\windows-llm-host` by default. Run PowerShell as Administrator if you want the command to open the Windows Firewall rule automatically; otherwise it will tell you the one elevated firewall command to run if LAN devices cannot connect.
+That installs into `%USERPROFILE%\windows-llm-host` by default. It prints the generated `LLM_HOST_API_KEY` in the terminal and stores it in `.env`.
+
+Run PowerShell as Administrator if you want the command to open the Windows Firewall rule automatically; otherwise it will tell you the one elevated firewall command to run if LAN devices cannot connect.
 
 After the first setup, rerun the same command any time you want to update the local checkout and running containers.
 
 The installer works in the stock Windows PowerShell that ships with Windows. PowerShell 7 is supported, but not required.
 
-Run these commands from this directory:
+From an existing checkout on Windows, you can also run:
+
+```powershell
+.\scripts\bootstrap.ps1
+```
+
+For manual Docker Compose usage, create `.env` and set `LLM_HOST_API_KEY` first:
 
 ```bash
+cp .env.example .env
+# edit .env and set LLM_HOST_API_KEY before starting the LAN-visible API
 docker compose up -d
 ./pull-models.sh
 ./smoke-test.sh
@@ -43,17 +48,12 @@ Then open:
 
 - Open WebUI: <http://localhost:3000>
 - windows-llm-host API proxy: <http://localhost:11434>
+- LAN API proxy: `http://<windows-machine-ip>:11434`
 
-From an existing checkout, you can also run:
-
-```powershell
-.\scripts\bootstrap.ps1
-```
-
-For LAN API access from another device:
+To force local-only API binding:
 
 ```powershell
-.\scripts\bootstrap.ps1 -Lan
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -LocalOnly
 ```
 
 Run the firewall helper from an elevated PowerShell session if other LAN devices cannot reach the API:
@@ -78,7 +78,8 @@ docker compose down -v
 
 - The compose file is now named `docker-compose.yml`, so `docker compose up -d` works without `-f`.
 - Ollama uses `gpus: all`, the direct Compose equivalent of `docker run --gpus all`.
-- The windows-llm-host API proxy and Open WebUI ports bind to `127.0.0.1` by default for local-only exposure.
+- The windows-llm-host API proxy binds to `0.0.0.0` by default for LAN access.
+- Open WebUI binds to `127.0.0.1` by default for local-only browser access.
 - Ollama is no longer published directly to the host; the proxy publishes native `/api/*` and OpenAI-compatible `/v1/*`.
 - Set `LLM_HOST_API_KEY` to require a bearer token on every proxied API request.
 - Ollama has a healthcheck, and Open WebUI waits for Ollama before starting.
@@ -90,7 +91,7 @@ docker compose down -v
 
 ### 1. NVIDIA Windows Driver
 
-Install a current NVIDIA Windows driver that supports WSL2 CUDA/GPU-PV. The Studio Driver is usually a good choice for laptop development.
+If you want GPU acceleration, install a current NVIDIA Windows driver that supports WSL2 CUDA/GPU-PV. The Studio Driver is usually a good choice for laptop development.
 
 Check from Windows PowerShell:
 
@@ -98,7 +99,7 @@ Check from Windows PowerShell:
 nvidia-smi
 ```
 
-You should see the RTX A2000 Laptop GPU, driver version, CUDA version, memory usage, and running processes.
+You should see your NVIDIA GPU, driver version, CUDA version, memory usage, and running processes.
 
 ### 2. WSL2 GPU Support
 
@@ -124,7 +125,7 @@ In Docker Desktop:
 
 - Use the WSL2 backend.
 - Enable integration with your WSL distro.
-- Give Docker enough resources for heavy models. For this laptop, start with 48 GB memory, all available CPUs, and at least 8 GB swap.
+- Give Docker enough CPU, memory, and swap for the model sizes you plan to run.
 
 Validate Docker GPU access:
 
@@ -180,15 +181,15 @@ References:
 
 ## Model Strategy
 
-The hard limit is 4 GB VRAM. Small quantized models can run mostly on GPU. Larger models will spill into system RAM and use CPU heavily. That is expected. With 64 GB RAM, you can run stronger models, but generation can become slow.
+Model performance depends heavily on GPU VRAM, system RAM, context length, and quantization. Small quantized models can often run mostly on GPU. Larger models may spill into system RAM and use CPU heavily, which is expected but slower.
 
 Recommended defaults:
 
 | Role | Model | Size | Why |
 |---|---:|---:|---|
 | Fastest model | `qwen3:1.7b-q8_0` | 2.2 GB | Fast sanity checks and quick answers. |
-| Best daily model | `qwen3:4b-instruct` | 2.5 GB | Best balance for this 4 GB VRAM laptop. Modern general model, long context tag. |
-| Best coding model | `qwen2.5-coder:7b-instruct-q4_K_M` | 4.7 GB | Strong practical code model. Likely partial GPU plus CPU/RAM on this GPU. |
+| Best daily model | `qwen3:4b-instruct` | 2.5 GB | Good balance for limited-VRAM machines. Modern general model, long context tag. |
+| Best coding model | `qwen2.5-coder:7b-instruct-q4_K_M` | 4.7 GB | Strong practical code model. May partially offload to CPU/RAM on modest GPUs. |
 | Highest quality but slower | `qwen3:14b-q4_K_M` | 9.3 GB | Better reasoning than small models, but it will lean on CPU/RAM. |
 | Max quality / heavy coding | `qwen3-coder:30b` | 19 GB | Strongest coding candidate here. It will be slow and RAM heavy. |
 | Max quality / heavy general | `qwen3:30b-instruct` | 19 GB | Stronger general model. Use when latency does not matter. |
@@ -205,13 +206,13 @@ Useful Ollama model pages:
 
 Use `qwen3:4b-instruct`.
 
-It is the best general default for this laptop because it is small enough to behave well with 4 GB VRAM, but much more capable than tiny models. It should be the first model you try in Open WebUI for normal chat, summarization, light coding, and analysis.
+It is the best general default when you want faster local interaction. It should be the first model you try in Open WebUI for normal chat, summarization, light coding, and analysis.
 
 ### Best Coding Model
 
 Use `qwen2.5-coder:7b-instruct-q4_K_M`.
 
-It is my recommended default model for API and coding use. It is larger than the GPU can fully hold once context/KV cache is included, but your 64 GB system RAM makes partial offload practical. Expect slower responses than the 4B model, but better code.
+It is the recommended default model for API and coding use. Expect slower responses than the 4B model, but better code.
 
 ### Fastest Model
 
@@ -223,7 +224,7 @@ Use it for smoke tests, quick command generation, simple transformations, and lo
 
 Use `qwen3:14b-q4_K_M` first.
 
-If you are willing to go heavier, benchmark `qwen3-coder:30b`, `qwen3:30b-instruct`, and `gpt-oss:20b`. These are not comfortable 4 GB VRAM models. They are included because you asked for maximum local capability and you have enough system RAM to try them.
+If you are willing to go heavier, benchmark `qwen3-coder:30b`, `qwen3:30b-instruct`, and `gpt-oss:20b`. These are not comfortable small-machine models. They are included for maximum local capability experiments.
 
 ## Pulling Models
 
@@ -321,15 +322,15 @@ This mode intentionally uses GPU, CPU, RAM, heat, and battery aggressively. Plug
 2. In NVIDIA Control Panel, prefer maximum performance for Docker Desktop / WSL if available.
 3. In Docker Desktop resources, allocate roughly:
    - CPUs: all or nearly all
-   - Memory: 48 to 56 GB
-   - Swap: 8 to 16 GB
+   - Memory: enough for your largest planned model
+   - Swap: enough headroom for larger models to spill without crashing
 4. Optional WSL config at `%UserProfile%\.wslconfig`:
 
 ```ini
 [wsl2]
-memory=56GB
-processors=20
-swap=16GB
+memory=<memory limit>
+processors=<cpu count>
+swap=<swap size>
 localhostForwarding=true
 ```
 
@@ -351,7 +352,7 @@ PROFILE=max ./pull-models.sh
 BENCH_PROFILE=max ./benchmark-models.sh
 ```
 
-Keep `OLLAMA_NUM_PARALLEL=1` for heavy models. Parallel requests can multiply memory pressure and make large models unusable on 4 GB VRAM.
+Keep `OLLAMA_NUM_PARALLEL=1` for heavy models. Parallel requests can multiply memory pressure and make large models unusable on smaller machines.
 
 ## API Usage
 
@@ -359,6 +360,12 @@ The windows-llm-host API proxy is reachable from the Windows host at:
 
 ```text
 http://localhost:11434
+```
+
+From another device on the same LAN, use:
+
+```text
+http://<windows-machine-ip>:11434
 ```
 
 Open WebUI is reachable at:
@@ -591,6 +598,14 @@ export LOCAL_AI_BASE_URL=http://localhost:11434
 export LOCAL_AI_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
 ```
 
+For LAN clients:
+
+```bash
+export LOCAL_AI_BASE_URL=http://<windows-machine-ip>:11434
+export LOCAL_AI_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
+export LLM_HOST_API_KEY=your-generated-key
+```
+
 For Open WebUI startup defaults, set:
 
 ```bash
@@ -601,16 +616,14 @@ This affects Open WebUI's default/pinned model list, not Ollama's native API beh
 
 ## Optional API Hardening
 
-Default behavior is local-only:
+Default API behavior is LAN-visible with bearer-token authentication:
 
 ```yaml
-127.0.0.1:11434:8080
+0.0.0.0:11434:8080
 127.0.0.1:3000:8080
 ```
 
-That means other machines on your LAN cannot call the API unless you opt in.
-
-To expose the API proxy to your LAN with a bearer token:
+The installer and bootstrap scripts generate `LLM_HOST_API_KEY` and print it in the terminal. To set a key manually:
 
 ```bash
 LLM_HOST_API_KEY="$(openssl rand -base64 32)" \
@@ -618,10 +631,10 @@ API_BIND=0.0.0.0 \
 docker compose up -d
 ```
 
-From PowerShell:
+To bind the API to localhost only:
 
 ```powershell
-.\scripts\bootstrap.ps1 -Lan
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -LocalOnly
 ```
 
 Risk: LAN exposure lets other devices send prompts and consume CPU/GPU/RAM if they have the token. Do not expose this directly to the public internet.
@@ -677,7 +690,7 @@ If a model is too slow or fails to load:
 
 ## Final Recommendation
 
-Use `qwen2.5-coder:7b-instruct-q4_K_M` as the default API/coding model. It is the strongest practical coding model in the default pull set and takes advantage of your 64 GB RAM when the 4 GB GPU is not enough.
+Use `qwen2.5-coder:7b-instruct-q4_K_M` as the default API/coding model. It is the strongest practical coding model in the default pull set.
 
 Use `qwen3:4b-instruct` as the default chat/daily model when you want faster local interaction.
 

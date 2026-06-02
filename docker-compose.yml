@@ -42,7 +42,7 @@ services:
       REQUEST_TIMEOUT_MS: "${REQUEST_TIMEOUT_MS:-0}"
       LOG_REQUESTS: "${LOG_REQUESTS:-true}"
     ports:
-      - "${API_BIND:-127.0.0.1}:${API_PORT:-11434}:8080"
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-11434}:8080"
     networks:
       - windows-llm-host-net
     healthcheck:

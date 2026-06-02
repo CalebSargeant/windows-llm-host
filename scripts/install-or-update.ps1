@@ -6,6 +6,7 @@ param(
   [string]$Model,
   [string]$Port,
   [switch]$Lan,
+  [switch]$LocalOnly,
   [switch]$ForceReset,
   [switch]$SkipModelPull,
   [switch]$SkipSmokeTest,
@@ -176,11 +177,12 @@ if (-not $currentKey) {
   Write-Host "Generated LLM_HOST_API_KEY in .env"
 }
 
-if ($Lan) {
+if ($LocalOnly) {
+  Set-DotEnvValue -Path $envFile -Name "API_BIND" -Value "127.0.0.1"
+  $env:API_BIND = "127.0.0.1"
+} else {
   Set-DotEnvValue -Path $envFile -Name "API_BIND" -Value "0.0.0.0"
   $env:API_BIND = "0.0.0.0"
-} else {
-  $env:API_BIND = Get-DotEnvValue -Path $envFile -Name "API_BIND" -Default "127.0.0.1"
 }
 
 if ($Port) {
@@ -202,15 +204,12 @@ Invoke-Checked -Command "docker" -Arguments @("compose", "build", "--pull", "api
 
 Write-Host "Starting windows-llm-host..."
 $startArgs = @()
-if ($Lan) {
-  $startArgs += "-Lan"
-}
 if ($Port) {
   $startArgs += @("-Port", $Port)
 }
 & (Join-Path $InstallDir "scripts\start.ps1") @startArgs
 
-if ($Lan -and -not $NoFirewall) {
+if (-not $LocalOnly -and -not $NoFirewall) {
   if (Test-IsAdmin) {
     & (Join-Path $InstallDir "scripts\allow-firewall.ps1")
   } else {
@@ -229,7 +228,7 @@ if (-not $SkipSmokeTest) {
   & (Join-Path $InstallDir "scripts\smoke-test.ps1") -Model $Model
 }
 
-$bind = Get-DotEnvValue -Path $envFile -Name "API_BIND" -Default "127.0.0.1"
+$bind = Get-DotEnvValue -Path $envFile -Name "API_BIND" -Default "0.0.0.0"
 $displayHost = if ($bind -eq "0.0.0.0") { "<this-laptop-ip>" } else { $bind }
 $displayPort = Get-DotEnvValue -Path $envFile -Name "API_PORT" -Default "11434"
 
@@ -239,4 +238,5 @@ Write-Host "Install dir: $InstallDir"
 Write-Host "Local health: http://localhost:$displayPort/health"
 Write-Host "OpenAI base URL: http://$displayHost`:$displayPort/v1"
 Write-Host "Native Ollama API: http://$displayHost`:$displayPort/api"
-Write-Host "API key: stored in $envFile as LLM_HOST_API_KEY"
+Write-Host "API key: $currentKey"
+Write-Host "API key file: $envFile"
