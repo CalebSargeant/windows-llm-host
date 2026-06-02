@@ -75,7 +75,12 @@ function Wait-ForDocker {
 
 function New-LlmHostApiKey {
   $bytes = New-Object byte[] 32
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    $rng.Dispose()
+  }
   return [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
 }
 
@@ -131,7 +136,7 @@ function Update-Repository {
     Write-Host "Updating existing checkout: $InstallDir"
     Invoke-Checked -Command "git" -Arguments @("-C", $InstallDir, "fetch", "origin", $Branch, "--prune")
 
-    $dirty = & git -C $InstallDir status --porcelain
+    $dirty = & git -C $InstallDir status --porcelain --untracked-files=no
     if ($dirty -and -not $ForceReset) {
       throw "Local changes found in $InstallDir. Commit them, remove them, or rerun with -ForceReset to discard local changes."
     }

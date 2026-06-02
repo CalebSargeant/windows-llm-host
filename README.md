@@ -23,6 +23,8 @@ That installs into `%USERPROFILE%\windows-llm-host` by default. Run PowerShell a
 
 After the first setup, rerun the same command any time you want to update the local checkout and running containers.
 
+The installer works in the stock Windows PowerShell that ships with Windows. PowerShell 7 is supported, but not required.
+
 Run these commands from this directory:
 
 ```bash
