@@ -3,7 +3,8 @@
 #
 # Usage:
 #   ./benchmark-models.sh
-#   BENCH_PROFILE=max ./benchmark-models.sh
+#   BENCH_PROFILE=max ./benchmark-models.sh        # up to 70B-class
+#   BENCH_PROFILE=extreme ./benchmark-models.sh    # incl. models that exceed ~64 GB RAM
 #   ./benchmark-models.sh qwen3:4b-instruct qwen2.5-coder:7b-instruct-q4_K_M
 
 set -euo pipefail
@@ -35,8 +36,16 @@ MAX_MODELS=(
   "qwen2.5-coder:7b-instruct-q4_K_M|Best practical coding model"
   "qwen3:14b-q4_K_M|Stronger quality model"
   "gpt-oss:20b|Strong reasoning candidate"
-  "qwen3-coder:30b|Max quality coding mode"
-  "qwen3:30b-instruct|Max quality general mode"
+  "qwen3-coder:30b|Heavy coding mode"
+  "qwen3:30b-instruct|Heavy general mode"
+  "qwen2.5-coder:32b|Max coding mode"
+  "llama3.3:70b|Max general mode"
+)
+
+EXTREME_MODELS=(
+  "${MAX_MODELS[@]}"
+  "qwen2.5:72b|Max general (alt 70B)"
+  "gpt-oss:120b|Experimental, may exceed RAM"
 )
 
 CUSTOM_MODELS=()
@@ -57,8 +66,11 @@ else
     max|heavy)
       MODEL_ROWS=("${MAX_MODELS[@]}")
       ;;
+    extreme)
+      MODEL_ROWS=("${EXTREME_MODELS[@]}")
+      ;;
     *)
-      echo "Unknown BENCH_PROFILE='$BENCH_PROFILE'. Use fast, recommended, or max." >&2
+      echo "Unknown BENCH_PROFILE='$BENCH_PROFILE'. Use fast, recommended, max, or extreme." >&2
       exit 2
       ;;
   esac
@@ -312,7 +324,7 @@ for candidate in ("qwen3-coder:30b", "qwen3:30b-instruct", "gpt-oss:20b", "qwen3
         break
 
 heavy = None
-for candidate in ("qwen3-coder:30b", "qwen3:30b-instruct", "gpt-oss:20b"):
+for candidate in ("gpt-oss:120b", "qwen2.5:72b", "llama3.3:70b", "qwen2.5-coder:32b", "qwen3-coder:30b", "qwen3:30b-instruct", "gpt-oss:20b"):
     for r in results:
         if r["model"] == candidate and not r["error"]:
             heavy = candidate
