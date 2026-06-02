@@ -23,7 +23,8 @@ gui/
   WindowsLlmHost.Gui.sln
   src/WindowsLlmHost.Gui/
     App.xaml(.cs)              app entry point
-    MainWindow.xaml(.cs)       the single-window UI
+    MainWindow.xaml(.cs)       host window (hosts MainPage)
+    MainPage.xaml(.cs)         the UI (a Page, so x:Bind compiled bindings work)
     Package.appxmanifest       MSIX manifest (identity, capabilities, tiles)
     app.manifest               DPI awareness, supported OS
     Models/                    plain data types (ServiceStatus, OllamaModel, UpdateStatus)
