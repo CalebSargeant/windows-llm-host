@@ -69,8 +69,8 @@ services:
       ENABLE_FOLLOW_UP_GENERATION: "${ENABLE_FOLLOW_UP_GENERATION:-false}"
       ENABLE_TAGS_GENERATION: "${ENABLE_TAGS_GENERATION:-false}"
       ENABLE_MEMORIES: "${ENABLE_MEMORIES:-false}"
-      DEFAULT_MODELS: "${DEFAULT_MODEL:-qwen2.5-coder:7b-instruct-q4_K_M}"
-      DEFAULT_PINNED_MODELS: "${DEFAULT_PINNED_MODELS:-qwen3:4b-instruct,qwen2.5-coder:7b-instruct-q4_K_M,qwen3:14b-q4_K_M,qwen3-coder:30b}"
+      DEFAULT_MODELS: "${DEFAULT_MODEL:-qwen3-coder:30b}"
+      DEFAULT_PINNED_MODELS: "${DEFAULT_PINNED_MODELS:-qwen3-coder:30b,qwen3:30b-instruct,qwen3:14b-q4_K_M,qwen2.5-coder:7b-instruct-q4_K_M,qwen3:4b-instruct}"
     ports:
       - "${WEBUI_BIND:-127.0.0.1}:${WEBUI_PORT:-3000}:8080"
     volumes:

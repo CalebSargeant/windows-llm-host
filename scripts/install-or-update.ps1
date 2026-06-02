@@ -4,10 +4,13 @@ param(
   [string]$RepoUrl = "https://github.com/CalebSargeant/windows-llm-host.git",
   [string]$Branch = "main",
   [string]$Model,
+  [ValidateSet("max", "coding", "balanced", "fast")]
+  [string]$ModelPreference = "max",
   [string]$Port,
   [switch]$Lan,
   [switch]$LocalOnly,
   [switch]$ForceReset,
+  [switch]$SkipHardwareDetect,
   [switch]$SkipModelPull,
   [switch]$SkipSmokeTest,
   [switch]$NoFirewall
@@ -190,11 +193,26 @@ if ($Port) {
   $env:API_PORT = $Port
 }
 
-if (-not $Model) {
-  $Model = Get-DotEnvValue -Path $envFile -Name "DEFAULT_MODEL" -Default "qwen2.5-coder:7b-instruct-q4_K_M"
+Wait-ForDocker
+
+if (-not $Model -and -not $SkipHardwareDetect) {
+  try {
+    Write-Host "Detecting best local model for this hardware (preference: $ModelPreference)..."
+    $detectOutput = & (Join-Path $InstallDir "scripts\detect-model.ps1") -Preference $ModelPreference -Apply -Json
+    $detection = $detectOutput | ConvertFrom-Json
+    $Model = $detection.selected_model
+    Write-Host "Selected model: $Model [$($detection.selected_expected_mode)]"
+    Write-Host "Fast fallback: $($detection.fast_model)"
+    Write-Host "Balanced fallback: $($detection.balanced_model)"
+  }
+  catch {
+    Write-Warning "Hardware model detection failed: $($_.Exception.Message)"
+  }
 }
 
-Wait-ForDocker
+if (-not $Model) {
+  $Model = Get-DotEnvValue -Path $envFile -Name "DEFAULT_MODEL" -Default "qwen3-coder:30b"
+}
 
 Write-Host "Pulling updated container images..."
 Invoke-Checked -Command "docker" -Arguments @("compose", "pull", "--ignore-buildable")
@@ -238,5 +256,6 @@ Write-Host "Install dir: $InstallDir"
 Write-Host "Local health: http://localhost:$displayPort/health"
 Write-Host "OpenAI base URL: http://$displayHost`:$displayPort/v1"
 Write-Host "Native Ollama API: http://$displayHost`:$displayPort/api"
+Write-Host "Model: $Model"
 Write-Host "API key: $currentKey"
 Write-Host "API key file: $envFile"

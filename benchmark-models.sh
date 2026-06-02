@@ -11,7 +11,7 @@ set -euo pipefail
 CONTAINER="${OLLAMA_CONTAINER:-windows-llm-host-ollama}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 LLM_HOST_API_KEY="${LLM_HOST_API_KEY:-}"
-BENCH_PROFILE="${BENCH_PROFILE:-recommended}"
+BENCH_PROFILE="${BENCH_PROFILE:-max}"
 NUM_PREDICT="${NUM_PREDICT:-220}"
 NUM_CTX="${NUM_CTX:-4096}"
 RESULT_DIR="${RESULT_DIR:-benchmark-results}"
@@ -303,7 +303,7 @@ def md_table(results):
     return "\n".join(lines)
 
 preferred = None
-for candidate in ("qwen2.5-coder:7b-instruct-q4_K_M", "qwen3:4b-instruct", "qwen3:14b-q4_K_M"):
+for candidate in ("qwen3-coder:30b", "qwen3:30b-instruct", "gpt-oss:20b", "qwen3:14b-q4_K_M", "qwen2.5-coder:7b-instruct-q4_K_M", "qwen3:4b-instruct"):
     for r in results:
         if r["model"] == candidate and not r["error"]:
             preferred = candidate
