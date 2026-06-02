@@ -74,6 +74,36 @@ Delete downloaded models and Open WebUI data only when you really want to reset:
 docker compose down -v
 ```
 
+## Updating and Versioning
+
+The repo carries its version in the `VERSION` file. Re-running the install one-liner (or `.\scripts\install-or-update.ps1`) updates your checkout and containers in place while preserving `.env`, downloaded models, and Open WebUI/Ollama data. After an update it prints the installed version and tells you whether a newer GitHub release exists.
+
+Check for updates without changing anything:
+
+```powershell
+.\scripts\check-update.ps1                 # compare against the latest stable release
+.\scripts\check-update.ps1 -Channel main   # compare your checkout against origin/main
+.\scripts\check-update.ps1 -Json           # machine-readable output for scripts/GUI
+```
+
+Apply an available update:
+
+```powershell
+.\scripts\check-update.ps1 -Update
+```
+
+Pick what the installer tracks with `-Channel`:
+
+- `main` (default): the rolling `main` branch — newest changes, may be unreleased.
+- `stable`: the latest tagged GitHub release.
+- `prerelease`: the latest release including prereleases.
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CalebSargeant/windows-llm-host/main/scripts/install-or-update.ps1))) -Channel stable
+```
+
+`check-update.ps1` exits with code `10` when an update is available and `0` otherwise, so you can wire it into a scheduled task or a future GUI. Until releases are published, the stable/prerelease channels simply report that none were found and change nothing.
+
 ## What Changed
 
 - The compose file is now named `docker-compose.yml`, so `docker compose up -d` works without `-f`.
@@ -190,10 +220,16 @@ Recommended defaults:
 | Fastest model | `qwen3:1.7b-q8_0` | 2.2 GB | Fast sanity checks and quick answers. |
 | Best daily model | `qwen3:4b-instruct` | 2.5 GB | Good balance for limited-VRAM machines. Modern general model, long context tag. |
 | Best coding model | `qwen2.5-coder:7b-instruct-q4_K_M` | 4.7 GB | Strong practical code model. May partially offload to CPU/RAM on modest GPUs. |
-| Highest quality but slower | `qwen3:14b-q4_K_M` | 9.3 GB | Better reasoning than small models, but it will lean on CPU/RAM. |
-| Max quality / heavy coding | `qwen3-coder:30b` | 19 GB | Strongest coding candidate here. It will be slow and RAM heavy. |
-| Max quality / heavy general | `qwen3:30b-instruct` | 19 GB | Stronger general model. Use when latency does not matter. |
-| Strong reasoning candidate | `gpt-oss:20b` | large | Worth benchmarking against Qwen3 14B/30B for reasoning-heavy tasks. |
+| Higher quality, slower | `qwen3:14b-q4_K_M` | 9.3 GB | Better reasoning than small models, but it will lean on CPU/RAM. |
+| Strong reasoning candidate | `gpt-oss:20b` | ~13 GB | Worth benchmarking against Qwen3 14B/30B for reasoning-heavy tasks. |
+| Heavy coding | `qwen3-coder:30b` | 19 GB | Strong 30B coding candidate. Slow and RAM heavy. |
+| Heavy general | `qwen3:30b-instruct` | 19 GB | Stronger 30B general model. Use when latency does not matter. |
+| Max coding | `qwen2.5-coder:32b` | ~20 GB | 32B coding model. Wants a big-RAM machine. |
+| Max general (`max` ceiling) | `llama3.3:70b` | ~43 GB | 70B-class general model. Needs ~48 GB+ free RAM. Very slow on CPU, maximum local capability. |
+| Extreme general (alt 70B) | `qwen2.5:72b` | ~47 GB | Alternative 70B-class general model. `extreme` profile only. |
+| Extreme / experimental | `gpt-oss:120b` | ~65 GB | Will exceed 64 GB RAM and thrash swap. `extreme` profile, opt-in only. |
+
+The `max` profile pulls everything up to the 70B-class `llama3.3:70b`, which fits in RAM on a 64 GB machine (it runs almost entirely on CPU/RAM, so it is slow but maximally capable). The `extreme` profile additionally pulls models that can exceed 64 GB RAM and thrash swap — only use it if you have the RAM and have read the warnings. Pick the largest model whose latency and RAM footprint your machine can tolerate; benchmark before committing to a daily driver.
 
 Useful Ollama model pages:
 
@@ -224,7 +260,7 @@ Use it for smoke tests, quick command generation, simple transformations, and lo
 
 Use `qwen3:14b-q4_K_M` first.
 
-If you are willing to go heavier, benchmark `qwen3-coder:30b`, `qwen3:30b-instruct`, and `gpt-oss:20b`. These are not comfortable small-machine models. They are included for maximum local capability experiments.
+If you are willing to go heavier, benchmark `gpt-oss:20b`, `qwen3-coder:30b`, `qwen3:30b-instruct`, and `qwen2.5-coder:32b`. On a big-RAM machine (≈48 GB+ free) the `max` profile also pulls `llama3.3:70b` for maximum general capability, and the `extreme` profile adds `qwen2.5:72b` plus the experimental `gpt-oss:120b`. These are not comfortable small-machine models. They run mostly on CPU/RAM, so they are slow but maximally capable.
 
 ## Pulling Models
 
@@ -240,10 +276,16 @@ Fast-only set:
 PROFILE=fast ./pull-models.sh
 ```
 
-Maximum quality/heavy set:
+Maximum quality/heavy set (up to the 70B-class `llama3.3:70b`):
 
 ```bash
 PROFILE=max ./pull-models.sh
+```
+
+Everything, including experimental models that may exceed 64 GB RAM and thrash swap:
+
+```bash
+PROFILE=extreme ./pull-models.sh
 ```
 
 Pull explicit models:
@@ -270,10 +312,16 @@ Fast profile:
 BENCH_PROFILE=fast ./benchmark-models.sh
 ```
 
-Heavy/max profile:
+Heavy/max profile (up to 70B-class):
 
 ```bash
 BENCH_PROFILE=max ./benchmark-models.sh
+```
+
+Extreme profile (includes models that may exceed 64 GB RAM):
+
+```bash
+BENCH_PROFILE=extreme ./benchmark-models.sh
 ```
 
 Custom list:
@@ -353,6 +401,50 @@ BENCH_PROFILE=max ./benchmark-models.sh
 ```
 
 Keep `OLLAMA_NUM_PARALLEL=1` for heavy models. Parallel requests can multiply memory pressure and make large models unusable on smaller machines.
+
+## Game Mode (pause while gaming)
+
+When you start a game, you usually want the GPU, CPU, RAM, and thermal headroom back. `scripts/game-mode-watcher.ps1` watches for a gaming/performance-sensitive state and pauses the Docker stack, then restores it when you are done.
+
+Windows does not expose a reliable "Game Mode is active right now" API, so the watcher infers it from two signals:
+
+- A full-screen foreground window that is not the Windows shell (how nearly every game presents).
+- Any process you list in `GAME_MODE_PROCESSES` (game launchers or specific games).
+
+It is fully opt-in. Nothing pauses your stack unless you run the watcher or install the scheduled task.
+
+Run it in the foreground:
+
+```powershell
+.\scripts\game-mode-watcher.ps1
+```
+
+Install a background per-user Scheduled Task (no admin needed) that checks every couple of minutes and at logon:
+
+```powershell
+.\scripts\game-mode-watcher.ps1 -Install
+```
+
+Other commands:
+
+```powershell
+.\scripts\game-mode-watcher.ps1 -Status      # show detection state and whether the watcher paused the stack
+.\scripts\game-mode-watcher.ps1 -Once -WhatIf # one check, dry run, no Docker changes
+.\scripts\game-mode-watcher.ps1 -Uninstall   # remove the scheduled task
+```
+
+Configure behavior in `.env` (or with parameters):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `GAME_MODE_ACTION` | `stop` | `stop` keeps containers (fast resume); `down` removes them but keeps models. |
+| `GAME_MODE_RESTORE` | `true` | Restart the stack after the game exits. Set `false` to leave it down. |
+| `GAME_MODE_USE_FULLSCREEN` | `true` | Treat any full-screen non-shell foreground window as a game. |
+| `GAME_MODE_PROCESSES` | _(empty)_ | Comma-separated process names (no `.exe`) to always treat as games. |
+| `GAME_MODE_POLL_SECONDS` | `15` | Seconds between checks in continuous mode (also the scheduled-task interval, min 60s). |
+| `GAME_MODE_COOLDOWN_SECONDS` | `60` | How long the gaming state must stay clear before restoring. |
+
+The watcher only restores a stack that *it* paused (tracked in `.game-mode-state`), so it will not restart a stack you stopped yourself. If you also use the full-screen signal, note that full-screen video players will look like a game; add real games to `GAME_MODE_PROCESSES` and set `GAME_MODE_USE_FULLSCREEN=false` if you prefer process-only detection.
 
 ## API Usage
 
@@ -694,4 +786,4 @@ Use `qwen2.5-coder:7b-instruct-q4_K_M` as the default API/coding model. It is th
 
 Use `qwen3:4b-instruct` as the default chat/daily model when you want faster local interaction.
 
-Use `qwen3:14b-q4_K_M`, `qwen3-coder:30b`, `qwen3:30b-instruct`, and `gpt-oss:20b` only after benchmarking. They are included for maximum capability, not comfort.
+Use `qwen3:14b-q4_K_M`, `gpt-oss:20b`, the 30B Qwen3 models, `qwen2.5-coder:32b`, and the 70B-class `llama3.3:70b` (`max` profile) only after benchmarking. The `extreme` profile (`qwen2.5:72b`, `gpt-oss:120b`) is opt-in and can exceed 64 GB RAM. These are included for maximum capability, not comfort.
