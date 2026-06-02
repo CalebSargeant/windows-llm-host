@@ -324,3 +324,13 @@ if (-not $SkipUpdateCheck -and (Test-Path $commonLib)) {
     Write-Verbose "Update check skipped: $($_.Exception.Message)"
   }
 }
+
+$recommend = Join-Path $InstallDir "scripts\recommend-model.ps1"
+if (Test-Path $recommend) {
+  Write-Host ""
+  try {
+    & $recommend
+  } catch {
+    Write-Verbose "Model recommendation skipped: $($_.Exception.Message)"
+  }
+}
