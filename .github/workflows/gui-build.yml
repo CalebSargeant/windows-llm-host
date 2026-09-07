@@ -1,0 +1,61 @@
+name: GUI build (MSIX)
+
+# Builds the WinUI 3 management app and produces an unsigned MSIX artifact.
+# Signing + Store submission happen separately (see gui/README.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gui/**"
+      - ".github/workflows/gui-build.yml"
+  pull_request:
+    paths:
+      - "gui/**"
+      - ".github/workflows/gui-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform: [x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore
+        run: msbuild gui\WindowsLlmHost.Gui.sln /t:Restore /p:Configuration=Release /p:Platform=${{ matrix.platform }}
+
+      - name: Build and package (unsigned MSIX)
+        run: >
+          msbuild gui\WindowsLlmHost.Gui.sln
+          /p:Configuration=Release
+          /p:Platform=${{ matrix.platform }}
+          /p:GenerateAppxPackageOnBuild=true
+          /p:AppxPackageSigningEnabled=false
+          /p:UapAppxPackageBuildMode=SideloadOnly
+          /p:AppxBundle=Never
+          /p:AppxPackageDir=${{ github.workspace }}\artifacts\
+
+      - name: Upload MSIX
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-llm-host-gui-${{ matrix.platform }}
+          path: |
+            artifacts/**/*.msix
+            artifacts/**/*.msixbundle
+            artifacts/**/*.cer
+          if-no-files-found: warn
